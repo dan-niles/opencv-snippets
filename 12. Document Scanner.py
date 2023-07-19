@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from helpers.stackImages import stackImages
 
 frameWidth = 640
 frameHeight = 480
@@ -39,16 +40,36 @@ def getContours(img):
     return biggest
 
 
+def reorder(myPoints):
+    myPointsNew = np.zeros((4, 1, 2), np.int32)
+    myPoints = myPoints.reshape((4, 2))
+
+    add = myPoints.sum(1)
+    myPointsNew[0] = myPoints[np.argmin(add)]
+    myPointsNew[3] = myPoints[np.argmax(add)]
+
+    diff = np.diff(myPoints, axis=1)
+    myPointsNew[1] = myPoints[np.argmin(diff)]
+    myPointsNew[2] = myPoints[np.argmax(diff)]
+
+    return myPointsNew
+
+
 def getWarp(img, biggest):
+    newPoints = reorder(biggest)
     width, height = frameWidth, frameHeight
 
-    pts1 = np.float32([[111, 219], [287, 188], [154, 482], [352, 440]])
+    pts1 = np.float32(newPoints)
     pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
 
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
 
     imgOutput = cv2.warpPerspective(img, matrix, (width, height))
-    pass
+
+    imgCropped = imgOutput[20 : imgOutput.shape[0] - 20, 20 : imgOutput.shape[1] - 20]
+    imgCropped = cv2.resize(imgCropped, (width, height))
+
+    return imgCropped
 
 
 while True:
@@ -58,8 +79,16 @@ while True:
 
     imgThres = preprocessing(img)
     biggest = getContours(imgThres)
-    getWarp(img, biggest)
 
-    cv2.imshow("video", imgContour)
+    if biggest.size != 0:
+        imgWarped = getWarp(img, biggest)
+        imgArray = ([img, imgThres], [imgContour, imgWarped])
+    else:
+        imgArray = ([img, imgThres], [img, img])
+
+    imgStacked = stackImages(0.6, imgArray)
+
+    cv2.imshow("Stacked Output", imgStacked)
+    cv2.imshow("Result", imgWarped)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
